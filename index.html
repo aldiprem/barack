@@ -2,92 +2,54 @@
 <html lang="id">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Rocket Crash Game | Barack Gift</title>
-    <link rel="stylesheet" href="/css/style.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Spaceman Crash Game</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body>
     <div class="game-container">
-        <!-- Header -->
-        <div class="header">
-            <h1>🚀 ROCKET CRASH 🚀</h1>
-            <p>Cash out before the rocket crashes! Higher multiplier = bigger wins!</p>
+        <div class="game-header">
+            <h1>🚀 SPACEMAN CRASH GAME</h1>
+            <div class="domain-badge">https://www.barackgift.store</div>
         </div>
         
-        <!-- Stats Bar -->
-        <div class="stats-bar">
-            <div class="stat-card">
-                <div class="stat-label">Your Balance</div>
-                <div class="stat-value positive" id="balance">0.00</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-label">Last Result</div>
-                <div class="stat-value" id="lastResult">-</div>
-            </div>
-        </div>
-        
-        <!-- Game Area -->
         <div class="game-area">
-            <div class="rocket-container">
+            <div class="rocket-area">
                 <div class="rocket" id="rocket">
-                    <div class="rocket-body">
-                        <div class="rocket-nose"></div>
-                        <div class="rocket-window"></div>
-                        <div class="rocket-fin left"></div>
-                        <div class="rocket-fin right"></div>
-                        <div class="rocket-fire"></div>
-                    </div>
+                    🚀
                 </div>
+                <div class="flight-path"></div>
             </div>
             
             <div class="multiplier-display">
-                <div class="current-multiplier" id="currentMultiplier">1.00x</div>
-                <div class="multiplier-label">Current Multiplier</div>
+                <div class="multiplier-value" id="multiplier">1.00x</div>
+                <div class="multiplier-speed" id="speed">Speed: Normal</div>
             </div>
             
-            <div class="game-controls">
-                <div class="bet-section">
-                    <div class="bet-input-group">
-                        <label>Bet Amount:</label>
-                        <input type="number" id="betAmount" class="bet-input" value="100" step="10" min="10">
-                        <div class="bet-buttons">
-                            <button class="bet-preset" data-amount="10">10</button>
-                            <button class="bet-preset" data-amount="50">50</button>
-                            <button class="bet-preset" data-amount="100">100</button>
-                            <button class="bet-preset" data-amount="500">500</button>
-                            <button class="bet-preset" data-amount="1000">1000</button>
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="game-buttons">
-                    <button class="btn btn-start" id="startBtn">🚀 LAUNCH ROCKET</button>
-                    <button class="btn btn-cashout" id="cashoutBtn">💰 CASH OUT</button>
-                </div>
-                
-                <div class="game-status" id="gameStatus">
-                    Ready to launch!
-                </div>
+            <div class="countdown-overlay" id="countdownOverlay" style="display: none;">
+                <div class="countdown-number" id="countdownNumber"></div>
+                <div class="countdown-text">Next Round Starts In</div>
             </div>
         </div>
         
-        <!-- Statistics Section -->
-        <div class="history-section">
-            <h3>📊 Game Statistics</h3>
-            <div class="stats-bar" id="statsDistribution">
-                <div class="stat-card">Loading...</div>
+        <div class="game-info">
+            <div class="round-info">
+                <h3>Round History</h3>
+                <div class="history-list" id="historyList">
+                    <div class="loading">Loading history...</div>
+                </div>
             </div>
-        </div>
-        
-        <!-- History Section -->
-        <div class="history-section">
-            <h3>📜 Recent Games</h3>
-            <div class="history-list" id="historyList">
-                <div class="history-item">No games played yet</div>
+            
+            <div class="current-round-info">
+                <h3>Current Round</h3>
+                <div id="currentRoundInfo">
+                    <p>Round ID: <span id="roundId">-</span></p>
+                    <p>Target: <span id="targetMultiplier">-</span>x</p>
+                </div>
             </div>
         </div>
     </div>
     
-    <script src="/js/script.js"></script>
+    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
 </body>
 </html>

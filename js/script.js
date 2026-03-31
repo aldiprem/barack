@@ -1,519 +1,209 @@
-// API Configuration
-const API_BASE_URL = '/api';
-
-// Game State
-let currentRound = null;
-let currentMultiplier = 1.0;
-let gameActive = false;
-let userBalance = 10000;
-let currentBet = 0;
-let currentBetId = null;
-let userId = 'web_user';
-let countdownActive = false;
-let countdownValue = 0;
-let countdownInterval = null;
-let multiplierInterval = null;
-let pollingInterval = null;
-
-// DOM Elements
-const currentMultiplierEl = document.getElementById('currentMultiplier');
-const gameStatusEl = document.getElementById('gameStatus');
-const startBtn = document.getElementById('startBtn');
-const cashoutBtn = document.getElementById('cashoutBtn');
-const betInput = document.getElementById('betAmount');
-const balanceEl = document.getElementById('balance');
-const historyListEl = document.getElementById('historyList');
-const statsDistributionEl = document.getElementById('statsDistribution');
-const rocketEl = document.getElementById('rocket');
-const rocketContainer = document.querySelector('.rocket-container');
-
-// ============ UTILITY FUNCTIONS ============
-function formatNumber(num) {
-    return new Intl.NumberFormat('id-ID', {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2
-    }).format(num);
-}
-
-function updateBalance() {
-    if (balanceEl) balanceEl.textContent = formatNumber(userBalance);
-}
-
-function showNotification(message, type = 'info') {
-    const notification = document.createElement('div');
-    notification.textContent = message;
-    notification.style.cssText = `
-        position: fixed;
-        top: 20px;
-        right: 20px;
-        padding: 12px 20px;
-        border-radius: 10px;
-        background: ${type === 'success' ? '#4caf50' : type === 'error' ? '#ff6b6b' : '#ff8e53'};
-        color: white;
-        font-weight: bold;
-        z-index: 1000;
-        animation: slideIn 0.3s ease-out;
-    `;
-    document.body.appendChild(notification);
-    setTimeout(() => notification.remove(), 3000);
-}
-
-// ============ COUNTDOWN DISPLAY ============
-function showCountdown(seconds) {
-    countdownActive = true;
-    countdownValue = seconds;
-    
-    // Stop all game activities
-    if (multiplierInterval) {
-        clearInterval(multiplierInterval);
-        multiplierInterval = null;
+class SpacemanGame {
+    constructor() {
+        this.apiUrl = '/api';
+        this.updateInterval = null;
+        this.historyUpdateInterval = null;
+        this.init();
     }
     
-    gameActive = false;
+    init() {
+        this.startGameUpdates();
+        this.startHistoryUpdates();
+    }
     
-    // Hide rocket, show countdown
-    if (rocketEl) rocketEl.style.display = 'none';
+    startGameUpdates() {
+        this.updateInterval = setInterval(() => {
+            this.updateGameStatus();
+        }, 100); // Update every 100ms for smooth animation
+    }
     
-    // Create or update countdown display
-    let countdownDisplay = document.getElementById('countdownDisplay');
-    if (!countdownDisplay) {
-        countdownDisplay = document.createElement('div');
-        countdownDisplay.id = 'countdownDisplay';
-        countdownDisplay.style.cssText = `
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            font-size: 72px;
-            font-weight: bold;
-            color: #ff8e53;
-            text-align: center;
-            z-index: 10;
-            background: rgba(0,0,0,0.8);
-            padding: 40px;
-            border-radius: 20px;
-            font-family: monospace;
-            box-shadow: 0 0 30px rgba(255, 142, 83, 0.5);
-        `;
-        if (rocketContainer) {
-            rocketContainer.style.position = 'relative';
-            rocketContainer.appendChild(countdownDisplay);
+    startHistoryUpdates() {
+        this.historyUpdateInterval = setInterval(() => {
+            this.updateHistory();
+        }, 1000);
+    }
+    
+    async updateGameStatus() {
+        try {
+            const response = await fetch(`${this.apiUrl}/game/status`);
+            const data = await response.json();
+            
+            this.updateRocketPosition(data.multiplier);
+            this.updateMultiplierDisplay(data.multiplier);
+            this.updateSpeedDisplay(data.multiplier);
+            
+            if (data.countdown_active) {
+                this.showCountdown(data.countdown_value);
+            } else {
+                this.hideCountdown();
+            }
+            
+            if (data.current_round) {
+                this.updateCurrentRound(data.current_round);
+            }
+            
+        } catch (error) {
+            console.error('Error updating game status:', error);
         }
     }
     
-    countdownDisplay.style.display = 'block';
-    countdownDisplay.innerHTML = `${countdownValue}<br><span style="font-size: 24px;">Next round starts in...</span>`;
-    
-    // Disable buttons during countdown
-    startBtn.disabled = true;
-    cashoutBtn.disabled = true;
-    betInput.disabled = true;
-    
-    if (countdownInterval) clearInterval(countdownInterval);
-    
-    countdownInterval = setInterval(() => {
-        countdownValue--;
-        if (countdownDisplay) {
-            countdownDisplay.innerHTML = `${countdownValue}<br><span style="font-size: 24px;">Next round starts in...</span>`;
+    updateRocketPosition(multiplier) {
+        const rocket = document.getElementById('rocket');
+        // Map multiplier to height (1x = bottom, 100x = top)
+        const maxHeight = 250; // pixels
+        let height = Math.min((multiplier / 100) * maxHeight, maxHeight);
+        
+        if (multiplier >= 100) {
+            height = maxHeight;
         }
         
-        if (countdownValue <= 0) {
-            clearInterval(countdownInterval);
-            countdownInterval = null;
-            hideCountdown();
-            startNewRound();
+        rocket.style.bottom = `${height}px`;
+        
+        // Add shaking effect for high multipliers
+        if (multiplier > 10) {
+            const shake = Math.sin(Date.now() * 0.02) * 2;
+            rocket.style.transform = `translateX(-50%) translateX(${shake}px)`;
+        } else {
+            rocket.style.transform = 'translateX(-50%)';
         }
-    }, 1000);
-}
-
-function hideCountdown() {
-    countdownActive = false;
-    const countdownDisplay = document.getElementById('countdownDisplay');
-    if (countdownDisplay) {
-        countdownDisplay.style.display = 'none';
     }
-    if (rocketEl) rocketEl.style.display = 'block';
-    rocketEl.classList.remove('crash');
     
-    // Enable bet for next round
-    startBtn.disabled = false;
-    betInput.disabled = false;
-    gameStatusEl.textContent = 'Ready to launch!';
-    gameStatusEl.className = 'game-status';
-}
-
-// ============ MULTIPLIER ANIMATION ============
-function startMultiplierAnimation() {
-    if (multiplierInterval) clearInterval(multiplierInterval);
-    
-    let startTime = Date.now();
-    let lastMultiplier = 1.0;
-    
-    multiplierInterval = setInterval(() => {
-        if (!gameActive) return;
-        
-        const elapsed = (Date.now() - startTime) / 1000;
-        
-        // Multiplier increases exponentially: 1 + (elapsed ^ 1.8) * 1.2
-        let newMultiplier = 1.0;
-        if (elapsed > 0) {
-            newMultiplier = 1.0 + Math.pow(elapsed, 1.8) * 1.2;
-        }
-        
-        currentMultiplier = newMultiplier;
-        currentMultiplierEl.textContent = `${currentMultiplier.toFixed(2)}x`;
-        
-        // Animate rocket
-        const rocketHeight = Math.min(currentMultiplier * 30, 400);
-        if (rocketEl) rocketEl.style.transform = `translateY(-${rocketHeight}px)`;
+    updateMultiplierDisplay(multiplier) {
+        const multiplierElement = document.getElementById('multiplier');
+        multiplierElement.textContent = `${multiplier.toFixed(2)}x`;
         
         // Change color based on multiplier
-        if (currentMultiplier > 5) {
-            currentMultiplierEl.style.color = '#ff8e53';
-        } else if (currentMultiplier > 2) {
-            currentMultiplierEl.style.color = '#ff6b6b';
+        if (multiplier < 2) {
+            multiplierElement.style.color = '#4CAF50';
+        } else if (multiplier < 5) {
+            multiplierElement.style.color = '#FFC107';
+        } else if (multiplier < 10) {
+            multiplierElement.style.color = '#FF9800';
         } else {
-            currentMultiplierEl.style.color = '#4caf50';
+            multiplierElement.style.color = '#FF6B6B';
+        }
+    }
+    
+    updateSpeedDisplay(multiplier) {
+        const speedElement = document.getElementById('speed');
+        let speedText = 'Normal';
+        let speedValue = 1;
+        
+        if (multiplier < 2) {
+            speedText = 'Slow';
+            speedValue = 1;
+        } else if (multiplier < 5) {
+            speedText = 'Normal';
+            speedValue = 1.5;
+        } else if (multiplier < 10) {
+            speedText = 'Fast';
+            speedValue = 2;
+        } else if (multiplier < 20) {
+            speedText = 'Very Fast';
+            speedValue = 3;
+        } else if (multiplier < 50) {
+            speedText = 'Extreme';
+            speedValue = 5;
+        } else {
+            speedText = 'WARP SPEED!';
+            speedValue = 8;
         }
         
-        // Check crash
-        if (currentRound && currentMultiplier >= currentRound.crash_multiplier) {
-            handleCrash();
+        speedElement.textContent = `Speed: ${speedText}`;
+        speedElement.style.color = speedValue > 3 ? '#FF6B6B' : '#666';
+    }
+    
+    showCountdown(value) {
+        const overlay = document.getElementById('countdownOverlay');
+        const numberElement = document.getElementById('countdownNumber');
+        
+        if (overlay.style.display !== 'flex') {
+            overlay.style.display = 'flex';
         }
         
-        lastMultiplier = currentMultiplier;
-    }, 50); // Update every 50ms for smooth animation
-}
-
-function stopMultiplierAnimation() {
-    if (multiplierInterval) {
-        clearInterval(multiplierInterval);
-        multiplierInterval = null;
-    }
-}
-
-// ============ POLLING ============
-function startPolling() {
-    if (pollingInterval) clearInterval(pollingInterval);
-    
-    pollingInterval = setInterval(async () => {
-        if (!gameActive && !countdownActive) {
-            await fetchCurrentRound();
-        }
-    }, 5000); // Poll every 5 seconds only
-}
-
-// ============ GAME MECHANICS ============
-async function fetchCurrentRound() {
-    try {
-        const response = await fetch(`${API_BASE_URL}/game/current_round`);
-        const round = await response.json();
-        currentRound = round;
-        return round;
-    } catch (error) {
-        console.error('Error fetching round:', error);
-        return null;
-    }
-}
-
-async function fetchUserBalance() {
-    try {
-        const response = await fetch(`${API_BASE_URL}/game/user/${userId}`);
-        const user = await response.json();
-        userBalance = user.balance;
-        updateBalance();
-        return user;
-    } catch (error) {
-        console.error('Error fetching balance:', error);
-        return null;
-    }
-}
-
-async function startGame() {
-    // Cannot place bet if round is active
-    if (gameActive) {
-        showNotification('Round is already in progress! Wait for next round.', 'error');
-        return;
-    }
-    
-    const betAmount = parseFloat(betInput.value);
-    
-    if (isNaN(betAmount) || betAmount <= 0) {
-        showNotification('Please enter a valid bet amount!', 'error');
-        return;
-    }
-    
-    if (betAmount > userBalance) {
-        showNotification('Insufficient balance!', 'error');
-        return;
-    }
-    
-    try {
-        // Place bet
-        const betResponse = await fetch(`${API_BASE_URL}/game/bet`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ bet_amount: betAmount, user_id: userId })
-        });
+        numberElement.textContent = value;
         
-        const betData = await betResponse.json();
-        
-        if (betResponse.ok && betData.success) {
-            currentBet = betAmount;
-            currentBetId = betData.bet_id;
-            userBalance -= betAmount;
-            updateBalance();
-            gameActive = true;
+        // Add bounce animation
+        numberElement.style.animation = 'none';
+        numberElement.offsetHeight; // Trigger reflow
+        numberElement.style.animation = 'bounce 1s ease-in-out';
+    }
+    
+    hideCountdown() {
+        const overlay = document.getElementById('countdownOverlay');
+        overlay.style.display = 'none';
+    }
+    
+    async updateHistory() {
+        try {
+            const response = await fetch(`${this.apiUrl}/game/history`);
+            const history = await response.json();
             
-            // Update UI
-            startBtn.disabled = true;
-            cashoutBtn.disabled = false;
-            betInput.disabled = true;
-            gameStatusEl.className = 'game-status active';
-            gameStatusEl.textContent = '🚀 ROCKET FLYING... 🚀';
-            
-            // Reset rocket
-            if (rocketEl) {
-                rocketEl.style.transform = 'translateY(0)';
-                rocketEl.classList.remove('crash');
+            this.renderHistory(history);
+        } catch (error) {
+            console.error('Error updating history:', error);
+        }
+    }
+    
+    renderHistory(history) {
+        const historyList = document.getElementById('historyList');
+        
+        if (!history || history.length === 0) {
+            historyList.innerHTML = '<div class="loading">No history available</div>';
+            return;
+        }
+        
+        historyList.innerHTML = history.map(round => {
+            let multiplierClass = '';
+            if (round.multiplier >= 10) {
+                multiplierClass = 'ultra';
+            } else if (round.multiplier >= 5) {
+                multiplierClass = 'high';
             }
             
-            // Reset multiplier
-            currentMultiplier = 1.0;
-            currentMultiplierEl.textContent = '1.00x';
-            currentMultiplierEl.style.color = '#4caf50';
+            const date = new Date(round.start_time);
+            const timeStr = date.toLocaleTimeString();
             
-            // Start multiplier animation
-            startMultiplierAnimation();
-            
-            showNotification(`Bet placed! Round #${betData.round_number}`, 'success');
-        } else {
-            showNotification(betData.detail || 'Failed to place bet', 'error');
-        }
-    } catch (error) {
-        console.error('Error starting game:', error);
-        showNotification('Network error. Please try again.', 'error');
-    }
-}
-
-async function cashout() {
-    if (!gameActive) return;
-    
-    try {
-        // Stop animation
-        stopMultiplierAnimation();
-        
-        const response = await fetch(`${API_BASE_URL}/game/cashout`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ round_id: currentRound?.round_id || 1, user_id: userId })
-        });
-        
-        const data = await response.json();
-        
-        if (response.ok && data.success) {
-            gameActive = false;
-            userBalance = data.won_amount ? userBalance + data.won_amount : userBalance;
-            updateBalance();
-            
-            startBtn.disabled = true;
-            cashoutBtn.disabled = true;
-            betInput.disabled = true;
-            gameStatusEl.className = 'game-status cashed';
-            gameStatusEl.textContent = `🎉 CASHED OUT at ${data.cashed_out_at}x! Won: ${formatNumber(data.won_amount)} 🎉`;
-            
-            showNotification(data.message, 'success');
-            
-            // Start countdown for next round
-            showCountdown(10);
-        } else if (data.success === false) {
-            gameActive = false;
-            startBtn.disabled = true;
-            cashoutBtn.disabled = true;
-            betInput.disabled = true;
-            gameStatusEl.className = 'game-status crashed';
-            gameStatusEl.textContent = `💥 CRASHED at ${data.crash_multiplier}x! You lost ${formatNumber(currentBet)} 💥`;
-            
-            if (rocketEl) rocketEl.classList.add('crash');
-            
-            showNotification(data.message || `Round crashed at ${data.crash_multiplier}x!`, 'error');
-            
-            // Start countdown for next round
-            showCountdown(10);
-        }
-        
-        // Refresh history and stats
-        loadHistory();
-        loadStatistics();
-        
-    } catch (error) {
-        console.error('Error cashing out:', error);
-        showNotification('Network error. Please try again.', 'error');
-        if (gameActive) startMultiplierAnimation();
-    }
-}
-
-async function handleCrash() {
-    if (!gameActive) return;
-    
-    stopMultiplierAnimation();
-    
-    gameActive = false;
-    startBtn.disabled = true;
-    cashoutBtn.disabled = true;
-    betInput.disabled = true;
-    gameStatusEl.className = 'game-status crashed';
-    gameStatusEl.textContent = `💥 CRASHED at ${currentRound?.crash_multiplier || '?'}x! You lost ${formatNumber(currentBet)} 💥`;
-    
-    if (rocketEl) rocketEl.classList.add('crash');
-    
-    // Refresh balance
-    await fetchUserBalance();
-    
-    // Refresh history and stats
-    await loadHistory();
-    await loadStatistics();
-    
-    showNotification(`Round crashed at ${currentRound?.crash_multiplier || '?'}x! Better luck next time!`, 'error');
-    
-    // Start countdown for next round
-    showCountdown(10);
-}
-
-async function startNewRound() {
-    // Fetch new round
-    await fetchCurrentRound();
-    
-    // Reset UI
-    gameActive = false;
-    startBtn.disabled = false;
-    cashoutBtn.disabled = true;
-    betInput.disabled = false;
-    gameStatusEl.className = 'game-status';
-    gameStatusEl.textContent = 'Ready to launch!';
-    
-    // Reset multiplier display
-    currentMultiplier = 1.0;
-    currentMultiplierEl.textContent = '1.00x';
-    currentMultiplierEl.style.color = '#4caf50';
-    
-    // Reset rocket
-    if (rocketEl) {
-        rocketEl.style.transform = 'translateY(0)';
-        rocketEl.classList.remove('crash');
-    }
-    
-    showNotification('New round started! Place your bet!', 'success');
-}
-
-// ============ STATISTICS ============
-async function loadStatistics() {
-    try {
-        const response = await fetch(`${API_BASE_URL}/game/statistics`);
-        const stats = await response.json();
-        
-        if (response.ok && statsDistributionEl) {
-            statsDistributionEl.innerHTML = `
-                <div class="stat-card"><div class="stat-label">Total Rounds</div><div class="stat-value">${stats.total_rounds || 0}</div></div>
-                <div class="stat-card"><div class="stat-label">Avg Crash</div><div class="stat-value">${stats.avg_crash_point || 0}x</div></div>
-                <div class="stat-card"><div class="stat-label">Low Crash</div><div class="stat-value">${stats.low_crash_count || 0}</div></div>
-                <div class="stat-card"><div class="stat-label">High Crash</div><div class="stat-value">${stats.high_crash_count || 0}</div></div>
+            return `
+                <div class="history-item">
+                    <div class="history-round">
+                        <small>${round.round_id.substring(0, 8)}...</small>
+                        <small style="color:#999">${timeStr}</small>
+                    </div>
+                    <div class="history-multiplier ${multiplierClass}">
+                        ${round.multiplier.toFixed(2)}x
+                    </div>
+                </div>
             `;
-        }
-    } catch (error) {
-        console.error('Error loading statistics:', error);
+        }).join('');
     }
-}
-
-async function loadHistory() {
-    try {
-        const response = await fetch(`${API_BASE_URL}/game/history?limit=20`);
-        const history = await response.json();
+    
+    updateCurrentRound(round) {
+        const roundIdElement = document.getElementById('roundId');
+        const targetElement = document.getElementById('targetMultiplier');
         
-        if (historyListEl) {
-            historyListEl.innerHTML = '';
-            if (!history || history.length === 0) {
-                historyListEl.innerHTML = '<div class="history-item">No games played yet</div>';
+        if (round) {
+            roundIdElement.textContent = round.round_id.substring(0, 16) + '...';
+            targetElement.textContent = round.multiplier;
+            
+            // Change color based on target multiplier
+            if (round.multiplier >= 10) {
+                targetElement.style.color = '#FF1493';
+            } else if (round.multiplier >= 5) {
+                targetElement.style.color = '#FFD700';
+            } else if (round.multiplier >= 2) {
+                targetElement.style.color = '#FFC107';
             } else {
-                history.forEach(round => {
-                    const historyItem = document.createElement('div');
-                    historyItem.className = 'history-item';
-                    const time = new Date(round.start_time).toLocaleTimeString();
-                    historyItem.innerHTML = `
-                        <div>
-                            <span style="color: #aaa;">Round #${round.round_number}</span>
-                            <span style="margin-left: 10px;">${time}</span>
-                        </div>
-                        <div class="history-multiplier">
-                            <span class="history-crash ${round.status === 'crashed' ? 'crashed' : 'cashed'}">
-                                ${round.crash_multiplier}x
-                            </span>
-                        </div>
-                    `;
-                    historyListEl.appendChild(historyItem);
-                });
+                targetElement.style.color = '#4CAF50';
             }
+        } else {
+            roundIdElement.textContent = '-';
+            targetElement.textContent = '-';
         }
-    } catch (error) {
-        console.error('Error loading history:', error);
     }
 }
 
-// ============ BET PRESETS ============
-function setBetAmount(amount) {
-    if (betInput) betInput.value = amount;
-}
-
-// ============ EVENT LISTENERS ============
-if (startBtn) startBtn.addEventListener('click', startGame);
-if (cashoutBtn) cashoutBtn.addEventListener('click', cashout);
-
-document.querySelectorAll('.bet-preset').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-        const amount = parseFloat(btn.dataset.amount);
-        if (!isNaN(amount)) setBetAmount(amount);
-    });
+// Initialize game when page loads
+document.addEventListener('DOMContentLoaded', () => {
+    new SpacemanGame();
 });
-
-if (betInput) {
-    betInput.addEventListener('input', () => {
-        let value = parseFloat(betInput.value);
-        if (isNaN(value)) value = 0;
-        if (value < 0) betInput.value = 0;
-        if (value > userBalance) betInput.value = userBalance;
-    });
-}
-
-// Add CSS animations
-const style = document.createElement('style');
-style.textContent = `
-    @keyframes slideIn {
-        from { transform: translateX(100%); opacity: 0; }
-        to { transform: translateX(0); opacity: 1; }
-    }
-    @keyframes slideOut {
-        from { transform: translateX(0); opacity: 1; }
-        to { transform: translateX(100%); opacity: 0; }
-    }
-`;
-document.head.appendChild(style);
-
-// ============ INITIALIZATION ============
-async function init() {
-    await fetchUserBalance();
-    await loadStatistics();
-    await loadHistory();
-    await fetchCurrentRound();
-    
-    if (cashoutBtn) cashoutBtn.disabled = true;
-    if (betInput) betInput.value = 100;
-    startBtn.disabled = false;
-    
-    // Start polling for new rounds (only 5 seconds interval)
-    startPolling();
-    
-    console.log('Game initialized! Place your bet and LAUNCH!');
-}
-
-// Start the game
-init();
