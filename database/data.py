@@ -16,13 +16,17 @@ class Database:
         if self.connection:  # Only create tables if connection successful
             self.create_tables()
     
+    # database/data.py
     def connect(self):
         try:
-            self.connection = mysql.connector.connect(**DB_CONFIG)
-            print("Connected to MySQL successfully!")
+            self.connection = mysql.connector.connect(
+                host='localhost',
+                database='spaceman_game',
+                user='root',
+                password='Asdf1234_'
+            )
         except Error as e:
             print(f"Error connecting to MySQL: {e}")
-            self.connection = None
     
     def create_tables(self):
         if not self.connection:
