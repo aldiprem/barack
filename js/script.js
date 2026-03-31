@@ -9,7 +9,7 @@ let gameActive = false;
 let userBalance = 10000;
 let currentBet = 0;
 let currentBetId = null;
-let userId = 'web_user';  // ← Deklarasi userId
+let userId = 'web_user';
 
 // DOM Elements
 const currentMultiplierEl = document.getElementById('currentMultiplier');
@@ -66,6 +66,19 @@ async function fetchCurrentRound() {
     }
 }
 
+async function fetchUserBalance() {
+    try {
+        const response = await fetch(`${API_BASE_URL}/game/user/${userId}`);
+        const user = await response.json();
+        userBalance = user.balance;
+        updateBalance();
+        return user;
+    } catch (error) {
+        console.error('Error fetching balance:', error);
+        return null;
+    }
+}
+
 // ============ GAME MECHANICS ============
 async function startGame() {
     const betAmount = parseFloat(betInput.value);
@@ -109,8 +122,10 @@ async function startGame() {
             currentMultiplierEl.textContent = '1.00x';
             
             // Reset rocket position
-            if (rocketEl) rocketEl.style.transform = 'translateY(0)';
-            if (rocketEl) rocketEl.classList.remove('crash');
+            if (rocketEl) {
+                rocketEl.style.transform = 'translateY(0)';
+                rocketEl.classList.remove('crash');
+            }
             
             // Start multiplier update
             startMultiplierUpdate();
@@ -141,6 +156,15 @@ function startMultiplierUpdate() {
                 const rocketHeight = Math.min(currentMultiplier * 20, 200);
                 if (rocketEl) rocketEl.style.transform = `translateY(-${rocketHeight}px)`;
                 
+                // Change color based on multiplier
+                if (currentMultiplier > 5) {
+                    currentMultiplierEl.style.color = '#ff8e53';
+                } else if (currentMultiplier > 2) {
+                    currentMultiplierEl.style.color = '#ff6b6b';
+                } else {
+                    currentMultiplierEl.style.color = '#4caf50';
+                }
+                
                 // Check if round crashed
                 if (round.status === 'crashed' && gameActive) {
                     handleCrash(round);
@@ -166,7 +190,7 @@ async function cashout() {
         
         if (response.ok && data.success) {
             gameActive = false;
-            userBalance += data.won_amount;
+            userBalance = data.won_amount ? userBalance + data.won_amount : userBalance;
             updateBalance();
             
             startBtn.disabled = false;
@@ -178,13 +202,31 @@ async function cashout() {
             if (gameInterval) clearInterval(gameInterval);
             gameInterval = null;
             
-            // Refresh history
+            // Refresh history and stats
             loadHistory();
             loadStatistics();
             
             showNotification(data.message, 'success');
         } else if (data.success === false) {
-            handleCrash({ crash_multiplier: data.crash_multiplier });
+            // Round crashed before cashout
+            gameActive = false;
+            startBtn.disabled = false;
+            cashoutBtn.disabled = true;
+            betInput.disabled = false;
+            gameStatusEl.className = 'game-status crashed';
+            gameStatusEl.textContent = `💥 CRASHED at ${data.crash_multiplier}x! You lost ${formatNumber(currentBet)} 💥`;
+            
+            if (rocketEl) rocketEl.classList.add('crash');
+            
+            if (gameInterval) clearInterval(gameInterval);
+            gameInterval = null;
+            
+            // Refresh balance
+            fetchUserBalance();
+            loadHistory();
+            loadStatistics();
+            
+            showNotification(data.message || `Round crashed at ${data.crash_multiplier}x!`, 'error');
         }
     } catch (error) {
         console.error('Error cashing out:', error);
@@ -193,6 +235,8 @@ async function cashout() {
 }
 
 function handleCrash(round) {
+    if (!gameActive) return;
+    
     gameActive = false;
     startBtn.disabled = false;
     cashoutBtn.disabled = true;
@@ -208,18 +252,11 @@ function handleCrash(round) {
     // Refresh balance
     fetchUserBalance();
     
+    // Refresh history and stats
+    loadHistory();
+    loadStatistics();
+    
     showNotification(`Round crashed at ${round.crash_multiplier}x! Better luck next time!`, 'error');
-}
-
-async function fetchUserBalance() {
-    try {
-        const response = await fetch(`${API_BASE_URL}/game/user/${userId}`);
-        const user = await response.json();
-        userBalance = user.balance;
-        updateBalance();
-    } catch (error) {
-        console.error('Error fetching balance:', error);
-    }
 }
 
 // ============ STATISTICS ============
@@ -232,12 +269,15 @@ async function loadStatistics() {
             statsDistributionEl.innerHTML = `
                 <div class="stat-card"><div class="stat-label">Total Rounds</div><div class="stat-value">${stats.total_rounds || 0}</div></div>
                 <div class="stat-card"><div class="stat-label">Avg Crash</div><div class="stat-value">${stats.avg_crash_point || 0}x</div></div>
-                <div class="stat-card"><div class="stat-label">Low Crash</div><div class="stat-value">${stats.low_crash_count || 0}</div></div>
-                <div class="stat-card"><div class="stat-label">High Crash</div><div class="stat-value">${stats.high_crash_count || 0}</div></div>
+                <div class="stat-card"><div class="stat-label">Low Crash (&lt;1.15x)</div><div class="stat-value">${stats.low_crash_count || 0}</div></div>
+                <div class="stat-card"><div class="stat-label">High Crash (&gt;5x)</div><div class="stat-value">${stats.high_crash_count || 0}</div></div>
             `;
         }
     } catch (error) {
         console.error('Error loading statistics:', error);
+        if (statsDistributionEl) {
+            statsDistributionEl.innerHTML = '<div class="stat-card">Error loading stats</div>';
+        }
     }
 }
 
@@ -248,7 +288,7 @@ async function loadHistory() {
         
         if (historyListEl) {
             historyListEl.innerHTML = '';
-            if (history.length === 0) {
+            if (!history || history.length === 0) {
                 historyListEl.innerHTML = '<div class="history-item">No games played yet</div>';
             } else {
                 history.forEach(round => {
@@ -272,6 +312,9 @@ async function loadHistory() {
         }
     } catch (error) {
         console.error('Error loading history:', error);
+        if (historyListEl) {
+            historyListEl.innerHTML = '<div class="history-item">Error loading history</div>';
+        }
     }
 }
 
@@ -323,7 +366,7 @@ async function init() {
     if (cashoutBtn) cashoutBtn.disabled = true;
     if (betInput) betInput.value = 100;
     
-    // Start polling current round
+    // Start polling current round for display
     fetchCurrentRound();
     setInterval(async () => {
         if (!gameActive) {
@@ -337,4 +380,5 @@ async function init() {
     console.log('Game initialized! Place your bet and LAUNCH!');
 }
 
+// Start the game
 init();
