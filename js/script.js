@@ -1,7 +1,5 @@
 // API Configuration
-const API_BASE_URL = window.location.hostname === 'localhost' 
-    ? 'http://localhost:5500/api'
-    : 'https://app.barackgift.store/api';
+const API_BASE_URL = 'http://207.180.194.191:5500/api';
 
 // Game State
 let currentGame = null;
