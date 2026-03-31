@@ -124,19 +124,23 @@ async def place_bet(bet: BetRequest):
     
     user = User.get_or_create(bet.user_id)
     
-    if bet.bet_amount > user['balance']:
+    # Convert to float if needed
+    bet_amount = float(bet.bet_amount)
+    user_balance = float(user['balance'])
+    
+    if bet_amount > user_balance:
         raise HTTPException(status_code=400, detail="Insufficient balance")
     
     round_data = get_current_round()
-    User.update_balance(bet.user_id, bet.bet_amount, 'subtract')
-    bet_id = UserBet.create(round_data['id'], bet.user_id, bet.bet_amount)
+    User.update_balance(bet.user_id, bet_amount, 'subtract')
+    bet_id = UserBet.create(round_data['id'], bet.user_id, bet_amount)
     
     return {
         "success": True,
         "bet_id": bet_id,
         "round_id": round_data['id'],
         "round_number": round_data['round_number'],
-        "bet_amount": bet.bet_amount,
+        "bet_amount": bet_amount,
         "message": f"Bet placed! Round #{round_data['round_number']}"
     }
 
@@ -166,7 +170,10 @@ async def cashout(request: CashoutRequest):
             "crash_multiplier": round_data['crash_multiplier']
         }
     
-    win_amount = bet['bet_amount'] * current_multiplier
+    # Convert Decimal to float for multiplication
+    bet_amount = float(bet['bet_amount'])
+    win_amount = bet_amount * current_multiplier
+    
     UserBet.cashout(bet['id'], current_multiplier, win_amount)
     User.update_balance(request.user_id, win_amount, 'add')
     User.update_stats(request.user_id, win_amount)
@@ -174,7 +181,7 @@ async def cashout(request: CashoutRequest):
     return {
         "success": True,
         "cashed_out_at": current_multiplier,
-        "bet_amount": bet['bet_amount'],
+        "bet_amount": bet_amount,
         "won_amount": win_amount,
         "round_number": round_data['round_number'],
         "message": f"You cashed out at {current_multiplier}x! Won: {win_amount:,.2f}"
