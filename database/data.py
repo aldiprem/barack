@@ -2,25 +2,33 @@ import mysql.connector
 from mysql.connector import Error
 import hashlib
 import secrets
+import sys
+import os
+
+# Add parent directory to path
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from config import DB_CONFIG
 
 class Database:
     def __init__(self):
         self.connection = None
         self.connect()
-        self.create_tables()
+        if self.connection:  # Only create tables if connection successful
+            self.create_tables()
     
     def connect(self):
         try:
-            self.connection = mysql.connector.connect(
-                host='localhost',
-                database='spaceman_game',
-                user='root',
-                password=''
-            )
+            self.connection = mysql.connector.connect(**DB_CONFIG)
+            print("Connected to MySQL successfully!")
         except Error as e:
             print(f"Error connecting to MySQL: {e}")
+            self.connection = None
     
     def create_tables(self):
+        if not self.connection:
+            print("No database connection, skipping table creation")
+            return
+            
         cursor = self.connection.cursor()
         
         # Create rounds table
@@ -53,6 +61,7 @@ class Database:
         
         self.connection.commit()
         cursor.close()
+        print("Database tables created/verified successfully!")
     
     def generate_round_id(self):
         return secrets.token_hex(8)
@@ -62,6 +71,10 @@ class Database:
         return hashlib.sha256(data.encode()).hexdigest()
     
     def create_round(self, multiplier):
+        if not self.connection:
+            print("No database connection")
+            return None
+            
         cursor = self.connection.cursor()
         round_id = self.generate_round_id()
         bar_hash = self.generate_bar_hash(round_id, multiplier)
@@ -77,6 +90,8 @@ class Database:
         return {'round_id': round_id, 'bar_hash': bar_hash, 'multiplier': multiplier}
     
     def start_round(self, round_id):
+        if not self.connection:
+            return
         cursor = self.connection.cursor()
         query = "UPDATE rounds SET status = 'active', start_time = NOW() WHERE round_id = %s"
         cursor.execute(query, (round_id,))
@@ -84,6 +99,8 @@ class Database:
         cursor.close()
     
     def end_round(self, round_id):
+        if not self.connection:
+            return
         cursor = self.connection.cursor()
         query = "UPDATE rounds SET status = 'ended', end_time = NOW() WHERE round_id = %s"
         cursor.execute(query, (round_id,))
@@ -91,6 +108,8 @@ class Database:
         cursor.close()
     
     def get_round_history(self, limit=50):
+        if not self.connection:
+            return []
         cursor = self.connection.cursor(dictionary=True)
         query = """
             SELECT round_id, multiplier, status, start_time, end_time 
@@ -104,6 +123,8 @@ class Database:
         return results
     
     def get_active_round(self):
+        if not self.connection:
+            return None
         cursor = self.connection.cursor(dictionary=True)
         query = "SELECT * FROM rounds WHERE status = 'active' ORDER BY id DESC LIMIT 1"
         cursor.execute(query)
@@ -112,6 +133,8 @@ class Database:
         return result
     
     def get_pending_round(self):
+        if not self.connection:
+            return None
         cursor = self.connection.cursor(dictionary=True)
         query = "SELECT * FROM rounds WHERE status = 'pending' ORDER BY id DESC LIMIT 1"
         cursor.execute(query)
