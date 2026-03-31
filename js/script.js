@@ -63,7 +63,6 @@ function addToHistory(game) {
     }
 }
 
-// ============ GAME MECHANICS ============
 async function startGame() {
     const betAmount = parseFloat(betInput.value);
     
@@ -78,24 +77,20 @@ async function startGame() {
     }
     
     try {
-        const response = await fetch(`${API_BASE_URL}/game/start`, {
+        // Place bet first
+        const betResponse = await fetch(`${API_BASE_URL}/game/bet`, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                bet_amount: betAmount,
-                user_id: 'web_user'
-            })
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ bet_amount: betAmount, user_id: userId })
         });
         
-        const data = await response.json();
+        const betData = await betResponse.json();
         
-        if (response.ok) {
+        if (betResponse.ok && betData.success) {
             currentBet = betAmount;
+            currentBetId = betData.bet_id;
             userBalance -= betAmount;
             updateBalance();
-            currentGame = data.game_id;
             gameActive = true;
             
             // Update UI
@@ -110,15 +105,15 @@ async function startGame() {
             currentMultiplierEl.textContent = '1.00x';
             
             // Reset rocket position
-            rocketEl.style.transform = 'translateY(0)';
-            rocketEl.classList.remove('crash');
+            if (rocketEl) rocketEl.style.transform = 'translateY(0)';
+            if (rocketEl) rocketEl.classList.remove('crash');
             
-            // Start multiplier animation
+            // Start multiplier update
             startMultiplierUpdate();
             
-            showNotification('Game started! Cash out before the rocket crashes!', 'success');
+            showNotification(`Bet placed! Round #${betData.round_number}`, 'success');
         } else {
-            showNotification(data.detail || 'Failed to start game', 'error');
+            showNotification(betData.detail || 'Failed to place bet', 'error');
         }
     } catch (error) {
         console.error('Error starting game:', error);
