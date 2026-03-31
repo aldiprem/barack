@@ -4,7 +4,6 @@ const API_BASE_URL = '/api';
 // Game State
 let currentRound = null;
 let currentMultiplier = 1.0;
-let gameInterval = null;
 let gameActive = false;
 let userBalance = 10000;
 let currentBet = 0;
@@ -13,8 +12,8 @@ let userId = 'web_user';
 let countdownActive = false;
 let countdownValue = 0;
 let countdownInterval = null;
-let multiplierStartTime = null;
-let animationFrame = null;
+let multiplierInterval = null;
+let pollingInterval = null;
 
 // DOM Elements
 const currentMultiplierEl = document.getElementById('currentMultiplier');
@@ -23,7 +22,6 @@ const startBtn = document.getElementById('startBtn');
 const cashoutBtn = document.getElementById('cashoutBtn');
 const betInput = document.getElementById('betAmount');
 const balanceEl = document.getElementById('balance');
-const lastResultEl = document.getElementById('lastResult');
 const historyListEl = document.getElementById('historyList');
 const statsDistributionEl = document.getElementById('statsDistribution');
 const rocketEl = document.getElementById('rocket');
@@ -65,6 +63,14 @@ function showCountdown(seconds) {
     countdownActive = true;
     countdownValue = seconds;
     
+    // Stop all game activities
+    if (multiplierInterval) {
+        clearInterval(multiplierInterval);
+        multiplierInterval = null;
+    }
+    
+    gameActive = false;
+    
     // Hide rocket, show countdown
     if (rocketEl) rocketEl.style.display = 'none';
     
@@ -83,13 +89,16 @@ function showCountdown(seconds) {
             color: #ff8e53;
             text-align: center;
             z-index: 10;
-            background: rgba(0,0,0,0.7);
+            background: rgba(0,0,0,0.8);
             padding: 40px;
             border-radius: 20px;
             font-family: monospace;
+            box-shadow: 0 0 30px rgba(255, 142, 83, 0.5);
         `;
-        if (rocketContainer) rocketContainer.style.position = 'relative';
-        if (rocketContainer) rocketContainer.appendChild(countdownDisplay);
+        if (rocketContainer) {
+            rocketContainer.style.position = 'relative';
+            rocketContainer.appendChild(countdownDisplay);
+        }
     }
     
     countdownDisplay.style.display = 'block';
@@ -126,70 +135,72 @@ function hideCountdown() {
     if (rocketEl) rocketEl.style.display = 'block';
     rocketEl.classList.remove('crash');
     
-    // Enable bet input for next round
-    if (!gameActive) {
-        startBtn.disabled = false;
-        betInput.disabled = false;
-        gameStatusEl.textContent = 'Ready to launch!';
-        gameStatusEl.className = 'game-status';
-    }
+    // Enable bet for next round
+    startBtn.disabled = false;
+    betInput.disabled = false;
+    gameStatusEl.textContent = 'Ready to launch!';
+    gameStatusEl.className = 'game-status';
 }
 
 // ============ MULTIPLIER ANIMATION ============
 function startMultiplierAnimation() {
-    if (animationFrame) cancelAnimationFrame(animationFrame);
-    multiplierStartTime = performance.now();
+    if (multiplierInterval) clearInterval(multiplierInterval);
     
-    function updateMultiplier(timestamp) {
+    let startTime = Date.now();
+    let lastMultiplier = 1.0;
+    
+    multiplierInterval = setInterval(() => {
         if (!gameActive) return;
         
-        const elapsed = (timestamp - multiplierStartTime) / 1000;
+        const elapsed = (Date.now() - startTime) / 1000;
         
-        // Multiplier increases faster over time
-        // Formula: multiplier = 1 + (elapsed ^ 1.5) * 1.5
+        // Multiplier increases exponentially: 1 + (elapsed ^ 1.8) * 1.2
         let newMultiplier = 1.0;
         if (elapsed > 0) {
-            newMultiplier = 1.0 + Math.pow(elapsed, 1.5) * 1.5;
+            newMultiplier = 1.0 + Math.pow(elapsed, 1.8) * 1.2;
         }
         
         currentMultiplier = newMultiplier;
         currentMultiplierEl.textContent = `${currentMultiplier.toFixed(2)}x`;
         
-        // Animate rocket based on multiplier
-        const rocketHeight = Math.min(currentMultiplier * 25, 350);
+        // Animate rocket
+        const rocketHeight = Math.min(currentMultiplier * 30, 400);
         if (rocketEl) rocketEl.style.transform = `translateY(-${rocketHeight}px)`;
         
         // Change color based on multiplier
         if (currentMultiplier > 5) {
             currentMultiplierEl.style.color = '#ff8e53';
-            currentMultiplierEl.style.animation = 'pulse 0.5s infinite';
         } else if (currentMultiplier > 2) {
             currentMultiplierEl.style.color = '#ff6b6b';
         } else {
             currentMultiplierEl.style.color = '#4caf50';
         }
         
-        // Check if round should crash (based on server crash point)
+        // Check crash
         if (currentRound && currentMultiplier >= currentRound.crash_multiplier) {
-            handleCrash(currentRound);
-            return;
+            handleCrash();
         }
         
-        animationFrame = requestAnimationFrame(updateMultiplier);
-    }
-    
-    animationFrame = requestAnimationFrame(updateMultiplier);
+        lastMultiplier = currentMultiplier;
+    }, 50); // Update every 50ms for smooth animation
 }
 
 function stopMultiplierAnimation() {
-    if (animationFrame) {
-        cancelAnimationFrame(animationFrame);
-        animationFrame = null;
+    if (multiplierInterval) {
+        clearInterval(multiplierInterval);
+        multiplierInterval = null;
     }
-    if (gameInterval) {
-        clearInterval(gameInterval);
-        gameInterval = null;
-    }
+}
+
+// ============ POLLING ============
+function startPolling() {
+    if (pollingInterval) clearInterval(pollingInterval);
+    
+    pollingInterval = setInterval(async () => {
+        if (!gameActive && !countdownActive) {
+            await fetchCurrentRound();
+        }
+    }, 5000); // Poll every 5 seconds only
 }
 
 // ============ GAME MECHANICS ============
@@ -261,13 +272,13 @@ async function startGame() {
             gameStatusEl.className = 'game-status active';
             gameStatusEl.textContent = '🚀 ROCKET FLYING... 🚀';
             
-            // Reset rocket position
+            // Reset rocket
             if (rocketEl) {
                 rocketEl.style.transform = 'translateY(0)';
                 rocketEl.classList.remove('crash');
             }
             
-            // Reset multiplier display
+            // Reset multiplier
             currentMultiplier = 1.0;
             currentMultiplierEl.textContent = '1.00x';
             currentMultiplierEl.style.color = '#4caf50';
@@ -289,7 +300,7 @@ async function cashout() {
     if (!gameActive) return;
     
     try {
-        // Stop animation first
+        // Stop animation
         stopMultiplierAnimation();
         
         const response = await fetch(`${API_BASE_URL}/game/cashout`, {
@@ -338,12 +349,11 @@ async function cashout() {
     } catch (error) {
         console.error('Error cashing out:', error);
         showNotification('Network error. Please try again.', 'error');
-        // Resume animation if error
         if (gameActive) startMultiplierAnimation();
     }
 }
 
-function handleCrash(round) {
+async function handleCrash() {
     if (!gameActive) return;
     
     stopMultiplierAnimation();
@@ -353,18 +363,18 @@ function handleCrash(round) {
     cashoutBtn.disabled = true;
     betInput.disabled = true;
     gameStatusEl.className = 'game-status crashed';
-    gameStatusEl.textContent = `💥 CRASHED at ${round.crash_multiplier}x! You lost ${formatNumber(currentBet)} 💥`;
+    gameStatusEl.textContent = `💥 CRASHED at ${currentRound?.crash_multiplier || '?'}x! You lost ${formatNumber(currentBet)} 💥`;
     
     if (rocketEl) rocketEl.classList.add('crash');
     
     // Refresh balance
-    fetchUserBalance();
+    await fetchUserBalance();
     
     // Refresh history and stats
-    loadHistory();
-    loadStatistics();
+    await loadHistory();
+    await loadStatistics();
     
-    showNotification(`Round crashed at ${round.crash_multiplier}x! Better luck next time!`, 'error');
+    showNotification(`Round crashed at ${currentRound?.crash_multiplier || '?'}x! Better luck next time!`, 'error');
     
     // Start countdown for next round
     showCountdown(10);
@@ -406,15 +416,12 @@ async function loadStatistics() {
             statsDistributionEl.innerHTML = `
                 <div class="stat-card"><div class="stat-label">Total Rounds</div><div class="stat-value">${stats.total_rounds || 0}</div></div>
                 <div class="stat-card"><div class="stat-label">Avg Crash</div><div class="stat-value">${stats.avg_crash_point || 0}x</div></div>
-                <div class="stat-card"><div class="stat-label">Low Crash (&lt;1.15x)</div><div class="stat-value">${stats.low_crash_count || 0}</div></div>
-                <div class="stat-card"><div class="stat-label">High Crash (&gt;5x)</div><div class="stat-value">${stats.high_crash_count || 0}</div></div>
+                <div class="stat-card"><div class="stat-label">Low Crash</div><div class="stat-value">${stats.low_crash_count || 0}</div></div>
+                <div class="stat-card"><div class="stat-label">High Crash</div><div class="stat-value">${stats.high_crash_count || 0}</div></div>
             `;
         }
     } catch (error) {
         console.error('Error loading statistics:', error);
-        if (statsDistributionEl) {
-            statsDistributionEl.innerHTML = '<div class="stat-card">Error loading stats</div>';
-        }
     }
 }
 
@@ -449,9 +456,6 @@ async function loadHistory() {
         }
     } catch (error) {
         console.error('Error loading history:', error);
-        if (historyListEl) {
-            historyListEl.innerHTML = '<div class="history-item">Error loading history</div>';
-        }
     }
 }
 
@@ -491,10 +495,6 @@ style.textContent = `
         from { transform: translateX(0); opacity: 1; }
         to { transform: translateX(100%); opacity: 0; }
     }
-    @keyframes pulse {
-        0%, 100% { transform: scale(1); }
-        50% { transform: scale(1.05); }
-    }
 `;
 document.head.appendChild(style);
 
@@ -508,6 +508,9 @@ async function init() {
     if (cashoutBtn) cashoutBtn.disabled = true;
     if (betInput) betInput.value = 100;
     startBtn.disabled = false;
+    
+    // Start polling for new rounds (only 5 seconds interval)
+    startPolling();
     
     console.log('Game initialized! Place your bet and LAUNCH!');
 }
