@@ -4,13 +4,12 @@ Run with: python app.py
 """
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 import os
 import uvicorn
 
 # Import routes from service
 from service.game_service import router as game_router
-from service.config_service import settings
+from service.config_service import settings, db_config
 
 # Create FastAPI app
 app = FastAPI(
@@ -47,7 +46,7 @@ if __name__ == "__main__":
     print("=" * 50)
     print(f"📡 Server: http://{settings.API_HOST}:{settings.API_PORT}")
     print(f"📚 API Docs: http://{settings.API_HOST}:{settings.API_PORT}/docs")
-    print(f"💾 Database: {settings.DB_NAME} @ {settings.DB_HOST}")
+    print(f"💾 Database: {db_config.DB_NAME} @ {db_config.DB_HOST}")
     print("=" * 50)
     print("Press CTRL+C to stop")
     print("=" * 50)
