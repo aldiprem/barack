@@ -6,7 +6,7 @@ let currentGame = null;
 let currentMultiplier = 1.0;
 let gameInterval = null;
 let gameActive = false;
-let userBalance = 10000;
+let userBalance = 100000;
 let currentBet = 0;
 
 // DOM Elements
