@@ -11,7 +11,7 @@ def main():
     # Database config
     DB_HOST = "localhost"
     DB_USER = "root"
-    DB_PASSWORD = ""
+    DB_PASSWORD = "Asdf1234_"
     DB_NAME = "barack_crash"
     
     try:
