@@ -464,3 +464,32 @@ body {
 ::-webkit-scrollbar-thumb:hover {
     background: #ff6b6b;
 }
+
+/* Countdown Display */
+.rocket-container {
+    position: relative;
+    min-height: 300px;
+}
+
+#countdownDisplay {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 72px;
+    font-weight: bold;
+    color: #ff8e53;
+    text-align: center;
+    z-index: 10;
+    background: rgba(0,0,0,0.8);
+    padding: 40px;
+    border-radius: 20px;
+    font-family: monospace;
+    box-shadow: 0 0 30px rgba(255, 142, 83, 0.5);
+    animation: countdownPulse 1s infinite;
+}
+
+@keyframes countdownPulse {
+    0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+    50% { transform: translate(-50%, -50%) scale(1.05); opacity: 0.9; }
+}

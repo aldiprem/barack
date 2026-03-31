@@ -10,6 +10,11 @@ let userBalance = 10000;
 let currentBet = 0;
 let currentBetId = null;
 let userId = 'web_user';
+let countdownActive = false;
+let countdownValue = 0;
+let countdownInterval = null;
+let multiplierStartTime = null;
+let animationFrame = null;
 
 // DOM Elements
 const currentMultiplierEl = document.getElementById('currentMultiplier');
@@ -22,6 +27,7 @@ const lastResultEl = document.getElementById('lastResult');
 const historyListEl = document.getElementById('historyList');
 const statsDistributionEl = document.getElementById('statsDistribution');
 const rocketEl = document.getElementById('rocket');
+const rocketContainer = document.querySelector('.rocket-container');
 
 // ============ UTILITY FUNCTIONS ============
 function formatNumber(num) {
@@ -54,6 +60,139 @@ function showNotification(message, type = 'info') {
     setTimeout(() => notification.remove(), 3000);
 }
 
+// ============ COUNTDOWN DISPLAY ============
+function showCountdown(seconds) {
+    countdownActive = true;
+    countdownValue = seconds;
+    
+    // Hide rocket, show countdown
+    if (rocketEl) rocketEl.style.display = 'none';
+    
+    // Create or update countdown display
+    let countdownDisplay = document.getElementById('countdownDisplay');
+    if (!countdownDisplay) {
+        countdownDisplay = document.createElement('div');
+        countdownDisplay.id = 'countdownDisplay';
+        countdownDisplay.style.cssText = `
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 72px;
+            font-weight: bold;
+            color: #ff8e53;
+            text-align: center;
+            z-index: 10;
+            background: rgba(0,0,0,0.7);
+            padding: 40px;
+            border-radius: 20px;
+            font-family: monospace;
+        `;
+        if (rocketContainer) rocketContainer.style.position = 'relative';
+        if (rocketContainer) rocketContainer.appendChild(countdownDisplay);
+    }
+    
+    countdownDisplay.style.display = 'block';
+    countdownDisplay.innerHTML = `${countdownValue}<br><span style="font-size: 24px;">Next round starts in...</span>`;
+    
+    // Disable buttons during countdown
+    startBtn.disabled = true;
+    cashoutBtn.disabled = true;
+    betInput.disabled = true;
+    
+    if (countdownInterval) clearInterval(countdownInterval);
+    
+    countdownInterval = setInterval(() => {
+        countdownValue--;
+        if (countdownDisplay) {
+            countdownDisplay.innerHTML = `${countdownValue}<br><span style="font-size: 24px;">Next round starts in...</span>`;
+        }
+        
+        if (countdownValue <= 0) {
+            clearInterval(countdownInterval);
+            countdownInterval = null;
+            hideCountdown();
+            startNewRound();
+        }
+    }, 1000);
+}
+
+function hideCountdown() {
+    countdownActive = false;
+    const countdownDisplay = document.getElementById('countdownDisplay');
+    if (countdownDisplay) {
+        countdownDisplay.style.display = 'none';
+    }
+    if (rocketEl) rocketEl.style.display = 'block';
+    rocketEl.classList.remove('crash');
+    
+    // Enable bet input for next round
+    if (!gameActive) {
+        startBtn.disabled = false;
+        betInput.disabled = false;
+        gameStatusEl.textContent = 'Ready to launch!';
+        gameStatusEl.className = 'game-status';
+    }
+}
+
+// ============ MULTIPLIER ANIMATION ============
+function startMultiplierAnimation() {
+    if (animationFrame) cancelAnimationFrame(animationFrame);
+    multiplierStartTime = performance.now();
+    
+    function updateMultiplier(timestamp) {
+        if (!gameActive) return;
+        
+        const elapsed = (timestamp - multiplierStartTime) / 1000;
+        
+        // Multiplier increases faster over time
+        // Formula: multiplier = 1 + (elapsed ^ 1.5) * 1.5
+        let newMultiplier = 1.0;
+        if (elapsed > 0) {
+            newMultiplier = 1.0 + Math.pow(elapsed, 1.5) * 1.5;
+        }
+        
+        currentMultiplier = newMultiplier;
+        currentMultiplierEl.textContent = `${currentMultiplier.toFixed(2)}x`;
+        
+        // Animate rocket based on multiplier
+        const rocketHeight = Math.min(currentMultiplier * 25, 350);
+        if (rocketEl) rocketEl.style.transform = `translateY(-${rocketHeight}px)`;
+        
+        // Change color based on multiplier
+        if (currentMultiplier > 5) {
+            currentMultiplierEl.style.color = '#ff8e53';
+            currentMultiplierEl.style.animation = 'pulse 0.5s infinite';
+        } else if (currentMultiplier > 2) {
+            currentMultiplierEl.style.color = '#ff6b6b';
+        } else {
+            currentMultiplierEl.style.color = '#4caf50';
+        }
+        
+        // Check if round should crash (based on server crash point)
+        if (currentRound && currentMultiplier >= currentRound.crash_multiplier) {
+            handleCrash(currentRound);
+            return;
+        }
+        
+        animationFrame = requestAnimationFrame(updateMultiplier);
+    }
+    
+    animationFrame = requestAnimationFrame(updateMultiplier);
+}
+
+function stopMultiplierAnimation() {
+    if (animationFrame) {
+        cancelAnimationFrame(animationFrame);
+        animationFrame = null;
+    }
+    if (gameInterval) {
+        clearInterval(gameInterval);
+        gameInterval = null;
+    }
+}
+
+// ============ GAME MECHANICS ============
 async function fetchCurrentRound() {
     try {
         const response = await fetch(`${API_BASE_URL}/game/current_round`);
@@ -79,8 +218,13 @@ async function fetchUserBalance() {
     }
 }
 
-// ============ GAME MECHANICS ============
 async function startGame() {
+    // Cannot place bet if round is active
+    if (gameActive) {
+        showNotification('Round is already in progress! Wait for next round.', 'error');
+        return;
+    }
+    
     const betAmount = parseFloat(betInput.value);
     
     if (isNaN(betAmount) || betAmount <= 0) {
@@ -115,11 +259,7 @@ async function startGame() {
             cashoutBtn.disabled = false;
             betInput.disabled = true;
             gameStatusEl.className = 'game-status active';
-            gameStatusEl.textContent = '🚀 ROCKET LAUNCHING... 🚀';
-            
-            // Reset multiplier display
-            currentMultiplier = 1.0;
-            currentMultiplierEl.textContent = '1.00x';
+            gameStatusEl.textContent = '🚀 ROCKET FLYING... 🚀';
             
             // Reset rocket position
             if (rocketEl) {
@@ -127,8 +267,13 @@ async function startGame() {
                 rocketEl.classList.remove('crash');
             }
             
-            // Start multiplier update
-            startMultiplierUpdate();
+            // Reset multiplier display
+            currentMultiplier = 1.0;
+            currentMultiplierEl.textContent = '1.00x';
+            currentMultiplierEl.style.color = '#4caf50';
+            
+            // Start multiplier animation
+            startMultiplierAnimation();
             
             showNotification(`Bet placed! Round #${betData.round_number}`, 'success');
         } else {
@@ -140,46 +285,13 @@ async function startGame() {
     }
 }
 
-function startMultiplierUpdate() {
-    if (gameInterval) clearInterval(gameInterval);
-    
-    gameInterval = setInterval(async () => {
-        if (!gameActive) return;
-        
-        try {
-            const round = await fetchCurrentRound();
-            if (round) {
-                currentMultiplier = round.current_multiplier;
-                currentMultiplierEl.textContent = `${currentMultiplier.toFixed(2)}x`;
-                
-                // Animate rocket based on multiplier
-                const rocketHeight = Math.min(currentMultiplier * 20, 200);
-                if (rocketEl) rocketEl.style.transform = `translateY(-${rocketHeight}px)`;
-                
-                // Change color based on multiplier
-                if (currentMultiplier > 5) {
-                    currentMultiplierEl.style.color = '#ff8e53';
-                } else if (currentMultiplier > 2) {
-                    currentMultiplierEl.style.color = '#ff6b6b';
-                } else {
-                    currentMultiplierEl.style.color = '#4caf50';
-                }
-                
-                // Check if round crashed
-                if (round.status === 'crashed' && gameActive) {
-                    handleCrash(round);
-                }
-            }
-        } catch (error) {
-            console.error('Error fetching round state:', error);
-        }
-    }, 100);
-}
-
 async function cashout() {
     if (!gameActive) return;
     
     try {
+        // Stop animation first
+        stopMultiplierAnimation();
+        
         const response = await fetch(`${API_BASE_URL}/game/cashout`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -193,61 +305,57 @@ async function cashout() {
             userBalance = data.won_amount ? userBalance + data.won_amount : userBalance;
             updateBalance();
             
-            startBtn.disabled = false;
+            startBtn.disabled = true;
             cashoutBtn.disabled = true;
-            betInput.disabled = false;
+            betInput.disabled = true;
             gameStatusEl.className = 'game-status cashed';
             gameStatusEl.textContent = `🎉 CASHED OUT at ${data.cashed_out_at}x! Won: ${formatNumber(data.won_amount)} 🎉`;
             
-            if (gameInterval) clearInterval(gameInterval);
-            gameInterval = null;
-            
-            // Refresh history and stats
-            loadHistory();
-            loadStatistics();
-            
             showNotification(data.message, 'success');
+            
+            // Start countdown for next round
+            showCountdown(10);
         } else if (data.success === false) {
-            // Round crashed before cashout
             gameActive = false;
-            startBtn.disabled = false;
+            startBtn.disabled = true;
             cashoutBtn.disabled = true;
-            betInput.disabled = false;
+            betInput.disabled = true;
             gameStatusEl.className = 'game-status crashed';
             gameStatusEl.textContent = `💥 CRASHED at ${data.crash_multiplier}x! You lost ${formatNumber(currentBet)} 💥`;
             
             if (rocketEl) rocketEl.classList.add('crash');
             
-            if (gameInterval) clearInterval(gameInterval);
-            gameInterval = null;
-            
-            // Refresh balance
-            fetchUserBalance();
-            loadHistory();
-            loadStatistics();
-            
             showNotification(data.message || `Round crashed at ${data.crash_multiplier}x!`, 'error');
+            
+            // Start countdown for next round
+            showCountdown(10);
         }
+        
+        // Refresh history and stats
+        loadHistory();
+        loadStatistics();
+        
     } catch (error) {
         console.error('Error cashing out:', error);
         showNotification('Network error. Please try again.', 'error');
+        // Resume animation if error
+        if (gameActive) startMultiplierAnimation();
     }
 }
 
 function handleCrash(round) {
     if (!gameActive) return;
     
+    stopMultiplierAnimation();
+    
     gameActive = false;
-    startBtn.disabled = false;
+    startBtn.disabled = true;
     cashoutBtn.disabled = true;
-    betInput.disabled = false;
+    betInput.disabled = true;
     gameStatusEl.className = 'game-status crashed';
     gameStatusEl.textContent = `💥 CRASHED at ${round.crash_multiplier}x! You lost ${formatNumber(currentBet)} 💥`;
     
     if (rocketEl) rocketEl.classList.add('crash');
-    
-    if (gameInterval) clearInterval(gameInterval);
-    gameInterval = null;
     
     // Refresh balance
     fetchUserBalance();
@@ -257,6 +365,35 @@ function handleCrash(round) {
     loadStatistics();
     
     showNotification(`Round crashed at ${round.crash_multiplier}x! Better luck next time!`, 'error');
+    
+    // Start countdown for next round
+    showCountdown(10);
+}
+
+async function startNewRound() {
+    // Fetch new round
+    await fetchCurrentRound();
+    
+    // Reset UI
+    gameActive = false;
+    startBtn.disabled = false;
+    cashoutBtn.disabled = true;
+    betInput.disabled = false;
+    gameStatusEl.className = 'game-status';
+    gameStatusEl.textContent = 'Ready to launch!';
+    
+    // Reset multiplier display
+    currentMultiplier = 1.0;
+    currentMultiplierEl.textContent = '1.00x';
+    currentMultiplierEl.style.color = '#4caf50';
+    
+    // Reset rocket
+    if (rocketEl) {
+        rocketEl.style.transform = 'translateY(0)';
+        rocketEl.classList.remove('crash');
+    }
+    
+    showNotification('New round started! Place your bet!', 'success');
 }
 
 // ============ STATISTICS ============
@@ -354,6 +491,10 @@ style.textContent = `
         from { transform: translateX(0); opacity: 1; }
         to { transform: translateX(100%); opacity: 0; }
     }
+    @keyframes pulse {
+        0%, 100% { transform: scale(1); }
+        50% { transform: scale(1.05); }
+    }
 `;
 document.head.appendChild(style);
 
@@ -362,20 +503,11 @@ async function init() {
     await fetchUserBalance();
     await loadStatistics();
     await loadHistory();
+    await fetchCurrentRound();
     
     if (cashoutBtn) cashoutBtn.disabled = true;
     if (betInput) betInput.value = 100;
-    
-    // Start polling current round for display
-    fetchCurrentRound();
-    setInterval(async () => {
-        if (!gameActive) {
-            const round = await fetchCurrentRound();
-            if (round && currentMultiplierEl) {
-                currentMultiplierEl.textContent = `${round.current_multiplier.toFixed(2)}x`;
-            }
-        }
-    }, 1000);
+    startBtn.disabled = false;
     
     console.log('Game initialized! Place your bet and LAUNCH!');
 }
