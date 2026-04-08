@@ -1,106 +1,72 @@
-from flask import Flask, render_template, jsonify, request
+from flask import Flask, render_template, jsonify, send_from_directory
 from flask_cors import CORS
-from service.data_service import GameService
-import threading
-import time
-import random
+import mysql.connector
+from mysql.connector import Error
+import os
+from datetime import datetime
 
-app = Flask(__name__)
+app = Flask(__name__, 
+            template_folder='.',  # Menggunakan root folder sebagai template folder
+            static_folder='.')     # Menggunakan root folder sebagai static folder
 CORS(app)
 
-game_service = GameService()
-current_multiplier = 1.00
-round_active = False
-countdown_active = False
-countdown_value = 0
+# Konfigurasi Database (akan diisi nanti)
+db_config = {
+    'host': 'localhost',
+    'user': 'root',  # ganti sesuai kebutuhan
+    'password': 'Asdf1234_',  # ganti sesuai kebutuhan
+    'database': 'barackgift_db'  # ganti sesuai kebutuhan
+}
 
-def run_game_round():
-    """Main game loop running in background thread"""
-    global current_multiplier, round_active, countdown_active, countdown_value
-    
-    while True:
-        # Create new round
-        round_data = game_service.create_new_round()
-        target_multiplier = round_data['multiplier']
-        
-        # Start round
-        game_service.start_round(round_data)
-        round_active = True
-        current_multiplier = 1.00
-        
-        # Simulate rocket flight
-        speed = 1.0
-        while current_multiplier < target_multiplier and round_active:
-            # Increase speed based on multiplier
-            if current_multiplier < 2.0:
-                speed = 1.0
-            elif current_multiplier < 5.0:
-                speed = 1.5
-            elif current_multiplier < 10.0:
-                speed = 2.0
-            elif current_multiplier < 20.0:
-                speed = 3.0
-            elif current_multiplier < 50.0:
-                speed = 5.0
-            elif current_multiplier < 100.0:
-                speed = 8.0
-            else:
-                speed = 10.0
-            
-            # Cap speed at 100
-            if speed > 100:
-                speed = 100
-            
-            current_multiplier += speed * 0.01
-            current_multiplier = round(current_multiplier, 2)
-            time.sleep(0.016)  # ~60 FPS
-        
-        # Round ends - rocket crashes
-        round_active = False
-        
-        # End round in database
-        game_service.end_current_round()
-        
-        # Countdown before next round
-        countdown_active = True
-        for i in range(10, 0, -1):
-            countdown_value = i
-            time.sleep(1)
-        countdown_active = False
-        countdown_value = 0
+# Fungsi koneksi database
+def get_db_connection():
+    try:
+        connection = mysql.connector.connect(**db_config)
+        return connection
+    except Error as e:
+        print(f"Error connecting to MySQL: {e}")
+        return None
 
-# Start game thread
-game_thread = threading.Thread(target=run_game_round, daemon=True)
-game_thread.start()
-
+# Route utama
 @app.route('/')
 def index():
     return render_template('index.html')
 
-@app.route('/api/game/status')
-def game_status():
-    """Get current game status"""
-    global current_multiplier, round_active, countdown_active, countdown_value
-    
-    return jsonify({
-        'active': round_active,
-        'multiplier': current_multiplier,
-        'countdown_active': countdown_active,
-        'countdown_value': countdown_value,
-        'current_round': game_service.get_current_round()
-    })
+# Route untuk file CSS
+@app.route('/css/<path:filename>')
+def serve_css(filename):
+    return send_from_directory('css', filename)
 
-@app.route('/api/game/history')
-def game_history():
-    """Get round history"""
-    history = game_service.get_round_history()
-    return jsonify(history)
+# Route untuk file JS
+@app.route('/js/<path:filename>')
+def serve_js(filename):
+    return send_from_directory('js', filename)
 
-@app.route('/api/game/next-round', methods=['POST'])
-def next_round():
-    """Force next round (admin)"""
-    # This would be protected in production
-    return jsonify({'status': 'next round triggered'})
+# Route untuk user auth Telegram (contoh)
+@app.route('/api/telegram_user', methods=['GET'])
+def get_telegram_user():
+    # Contoh data user - nanti diintegrasikan dengan database
+    user_data = {
+        'username': 'user_telegram',
+        'first_name': 'User Telegram',
+        'photo_url': 'https://via.placeholder.com/40'
+    }
+    return jsonify(user_data)
+
+# Route untuk Games (kosong)
+@app.route('/api/games', methods=['GET'])
+def get_games():
+    return jsonify({'message': 'Games content coming soon', 'data': []})
+
+# Route untuk Market (kosong)
+@app.route('/api/market', methods=['GET'])
+def get_market():
+    return jsonify({'message': 'Market content coming soon', 'data': []})
+
+# Route untuk Profile (kosong)
+@app.route('/api/profile', methods=['GET'])
+def get_profile():
+    return jsonify({'message': 'Profile content coming soon', 'data': []})
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5500)
+    app.run(host='0.0.0.0', port=5500, debug=True)

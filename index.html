@@ -2,54 +2,47 @@
 <html lang="id">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Spaceman Crash Game</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Barack Gift</title>
     <link rel="stylesheet" href="/css/style.css">
 </head>
 <body>
-    <div class="game-container">
-        <div class="game-header">
-            <h1>🚀 SPACEMAN CRASH GAME</h1>
-            <div class="domain-badge">https://www.barackgift.store</div>
-        </div>
-        
-        <div class="game-area">
-            <div class="rocket-area">
-                <div class="rocket" id="rocket">
-                    🚀
-                </div>
-                <div class="flight-path"></div>
+    <div class="app-container">
+        <!-- Header dengan logo Telegram -->
+        <header class="glassy-header">
+            <div class="telegram-user" id="telegramUser">
+                <img id="userAvatar" class="user-avatar" src="https://via.placeholder.com/40" alt="User Avatar">
+                <span id="userName" class="user-name">Loading...</span>
             </div>
-            
-            <div class="multiplier-display">
-                <div class="multiplier-value" id="multiplier">1.00x</div>
-                <div class="multiplier-speed" id="speed">Speed: Normal</div>
-            </div>
-            
-            <div class="countdown-overlay" id="countdownOverlay" style="display: none;">
-                <div class="countdown-number" id="countdownNumber"></div>
-                <div class="countdown-text">Next Round Starts In</div>
-            </div>
-        </div>
-        
-        <div class="game-info">
-            <div class="round-info">
-                <h3>Round History</h3>
-                <div class="history-list" id="historyList">
-                    <div class="loading">Loading history...</div>
+        </header>
+
+        <!-- Main Content Area dengan Border Scroll -->
+        <main class="scroll-container" id="scrollContainer">
+            <div class="content-wrapper" id="contentWrapper">
+                <div class="content-placeholder">
+                    <h2>Selamat Datang</h2>
+                    <p>Pilih menu di bawah untuk melanjutkan</p>
                 </div>
             </div>
-            
-            <div class="current-round-info">
-                <h3>Current Round</h3>
-                <div id="currentRoundInfo">
-                    <p>Round ID: <span id="roundId">-</span></p>
-                    <p>Target: <span id="targetMultiplier">-</span>x</p>
-                </div>
+        </main>
+
+        <!-- Bottom Navigation dengan 3 Pagination -->
+        <nav class="bottom-nav">
+            <div class="nav-item" data-page="games">
+                <div class="nav-icon">🎮</div>
+                <span>Games</span>
             </div>
-        </div>
+            <div class="nav-item" data-page="market">
+                <div class="nav-icon">🛒</div>
+                <span>Market</span>
+            </div>
+            <div class="nav-item" data-page="profile">
+                <div class="nav-icon">👤</div>
+                <span>Profil</span>
+            </div>
+        </nav>
     </div>
-    
-    <script src="/js/script.js"></script>
+
+    <script src="/js/scripts.js"></script>
 </body>
 </html>
